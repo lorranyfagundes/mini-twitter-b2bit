@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api } from '../services/api';
 import { useState, useRef, useEffect } from 'react';
-import { Search, Image, Heart, LogOut } from 'lucide-react';
+// Adicionamos Pencil e Trash2 aqui!
+import { Search, Image, Heart, LogOut, Pencil, Trash2 } from 'lucide-react';
 
 interface Post {
   id: string | number;
@@ -25,7 +26,6 @@ const postSchema = z.object({
 
 type PostForm = z.infer<typeof postSchema>;
 
-// Função mágica para transformar Arquivo em String (Base64)
 const convertToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const fileReader = new FileReader();
@@ -41,45 +41,40 @@ export function Timeline() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Estado da Paginação
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Estados da Busca
   const [searchInput, setSearchInput] = useState('');
-  const [searchTerm, setSearchTerm] = useState(''); // Esse é o que vai pra API com atraso
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Efeito de "Debounce" para não floodar a API
+  // Estados para Edição
+  const [editingPostId, setEditingPostId] = useState<string | number | null>(null);
+  const [oldImage, setOldImage] = useState<string | null>(null);
+
+  const isLogged = !!localStorage.getItem('token');
+  const loggedUserId = Number(localStorage.getItem('userId')); // Pegando o ID logado
+
+  // Adicionamos o setValue aqui para preencher o form na edição
+  const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<PostForm>({
+    resolver: zodResolver(postSchema),
+  });
+
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       setSearchTerm(searchInput);
-      setCurrentPage(1); // Sempre que pesquisar algo novo, volta pra página 1
-    }, 500); // Espera 500ms depois que parar de digitar
+      setCurrentPage(1); 
+    }, 500); 
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchInput]);
 
-  const isLogged = !!localStorage.getItem('token');
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<PostForm>({
-    resolver: zodResolver(postSchema),
-  });
-
-  // Buscando os posts com base na página e na busca
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['posts', currentPage, searchTerm],
     queryFn: async () => {
-      // Monta a URL base com a página
       let url = `/posts?page=${currentPage}`;
-      
-      // Se tiver algo na busca, adiciona o &search= na URL
       if (searchTerm) {
         url += `&search=${encodeURIComponent(searchTerm)}`;
       }
-
       const response = await api.get(url);
-      
       const postsList = (response.data?.posts || []) as Post[];
-      
       const sortedPosts = postsList.slice().sort((a,b) => parseInt(String(b.id)) - parseInt(String(a.id)));
 
       return {
@@ -90,33 +85,19 @@ export function Timeline() {
     }
   });
 
-  // Para facilitar o uso lá embaixo
   const posts = data?.posts || [];
   const totalPages = data ? Math.ceil(data.total / data.limit) : 1;
 
+  // Mutação para CRIAR post
   const createPostMutation = useMutation({
-    mutationFn: async (data: PostForm) => {
-      let imageString = "";
-      
-      if (selectedFile) {
-        imageString = await convertToBase64(selectedFile);
-      }
-
-      const payload = {
-        title: data.title,
-        content: data.content,
-        image: imageString
-      };
-
+    mutationFn: async (payload: any) => {
       return await api.post('/posts', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
-      // Se postar com sucesso, volta para a página 1 para ver o post novo
       setCurrentPage(1);
       refetch(); 
-      reset(); 
-      setSelectedFile(null); 
+      cancelEdit();
     },
     onError: (error: any) => {
       console.error("Erro ao postar:", error.response?.data);
@@ -124,21 +105,108 @@ export function Timeline() {
     }
   });
 
-  const likePostMutation = useMutation({
-    mutationFn: async (postId: string) => {
-      await api.post(`/posts/${postId}/like`);
+  // Mutação para EDITAR post
+  const updatePostMutation = useMutation({
+    mutationFn: async (data: { id: string | number; payload: any }) => {
+      return await api.put(`/posts/${data.id}`, data.payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      cancelEdit();
+      alert('Post atualizado com sucesso!');
+    },
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        alert("Erro 403: Você não tem permissão para editar este post.");
+      } else {
+        alert("Erro ao editar o post.");
+      }
     }
   });
 
-  function onSubmit(data: PostForm) {
+  // Mutação para DELETAR post
+  const deletePostMutation = useMutation({
+    mutationFn: async (postId: string | number) => {
+      await api.delete(`/posts/${postId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (error: any) => {
+      if (error.response?.status === 403) {
+        alert("Erro 403: Você não tem permissão para excluir este post.");
+      } else {
+        alert("Erro ao excluir o post.");
+      }
+    }
+  });
+
+  const likePostMutation = useMutation({
+    mutationFn: async (postId: string | number) => {
+      // A API de like geralmente é um POST para o ID do post
+      return await api.post(`/posts/${postId}/like`);
+    },
+    onSuccess: () => {
+      // Isso aqui avisa o React Query que os dados "envelheceram" 
+      // e ele precisa buscar os números novos na API imediatamente
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (error: any) => {
+      if (error.response?.status === 401) {
+        alert("Você precisa estar logado para curtir!");
+      } else {
+        alert("Erro ao processar o like.");
+      }
+    }
+  });
+
+  async function onSubmit(data: PostForm) {
     if (!isLogged) {
       alert("Você precisa estar logado para criar um post!");
       return;
     }
-    createPostMutation.mutate(data);
+
+    let imageString = oldImage || ""; // Mantém a imagem antiga se for edição e não mexerem
+    
+    if (selectedFile) {
+      imageString = await convertToBase64(selectedFile);
+    }
+
+    const payload = {
+      title: data.title,
+      content: data.content,
+      image: imageString
+    };
+
+    if (editingPostId) {
+      updatePostMutation.mutate({ id: editingPostId, payload });
+    } else {
+      createPostMutation.mutate(payload);
+    }
+  }
+
+  // Função para iniciar a edição
+  function handleEditClick(post: Post) {
+    setEditingPostId(post.id);
+    setValue('title', post.title);
+    setValue('content', post.content);
+    setOldImage(post.image || null);
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Sobe a tela suavemente pro form
+  }
+
+  // Função para cancelar a edição
+  function cancelEdit() {
+    setEditingPostId(null);
+    setOldImage(null);
+    setSelectedFile(null);
+    reset(); // Limpa o formulário
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleDeleteClick(postId: string | number) {
+    if (window.confirm("Tem certeza que deseja apagar esta publicação? Isso não pode ser desfeito.")) {
+      deletePostMutation.mutate(postId);
+    }
   }
 
   function handleLike(postId: string) {
@@ -190,13 +258,13 @@ export function Timeline() {
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 h-5 w-5" />
             <input 
-                type="search" 
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Buscar por post..." 
-                className="w-full bg-[#0F172A] border border-slate-700 rounded-full py-2.5 pl-10 pr-4 text-sm text-gray-300 placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition" 
+              type="search" 
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Buscar por post..." 
+              className="w-full bg-[#0F172A] border border-slate-700 rounded-full py-2.5 pl-10 pr-4 text-sm text-gray-300 placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition" 
             />
-            </div>
+          </div>
 
           <div className="flex justify-end gap-2 pr-2">
             {isLogged ? (
@@ -212,8 +280,14 @@ export function Timeline() {
           </div>
         </header>
 
-        {/* Formulário de Nova Postagem */}
-        <div className="bg-[#1E293B] p-6 rounded-2xl shadow-xl border border-slate-700">
+        {/* Formulário de Postagem / Edição */}
+        <div className={`p-6 rounded-2xl shadow-xl border transition-colors ${editingPostId ? 'bg-blue-900/20 border-blue-500' : 'bg-[#1E293B] border-slate-700'}`}>
+          {editingPostId && (
+            <div className="flex items-center gap-2 mb-4 text-blue-400 font-semibold">
+              <Pencil className="h-4 w-4" /> Editando Publicação
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <input 
               {...register('title')} 
@@ -230,9 +304,9 @@ export function Timeline() {
             />
             {errors.content && <span className="text-red-500 text-sm pl-1">{errors.content.message}</span>}
 
-            {selectedFile && (
-              <p className="text-sm text-blue-400 bg-blue-950 p-2 rounded-lg">
-                Imagem: {selectedFile.name}
+            {(selectedFile || oldImage) && (
+              <p className="text-sm text-blue-400 bg-blue-950/50 p-2 rounded-lg border border-blue-900/50">
+                Imagem: {selectedFile ? selectedFile.name : 'Imagem original mantida'}
               </p>
             )}
 
@@ -241,19 +315,33 @@ export function Timeline() {
                 type="button" 
                 onClick={() => fileInputRef.current?.click()} 
                 className="text-blue-500 hover:bg-blue-950 p-2.5 rounded-xl transition mt-2"
+                title="Adicionar ou trocar imagem"
               >
                 <Image className="h-6 w-6" />
               </button>
               
               <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-              <button 
-                type="submit" 
-                disabled={createPostMutation.isPending}
-                className="bg-blue-500 text-white px-8 py-2.5 mt-2 rounded-full font-bold hover:bg-blue-600 transition disabled:opacity-50 shadow-lg shadow-blue-500/20"
-              >
-                {createPostMutation.isPending ? 'Postando...' : 'Postar'}
-              </button>
+              <div className="flex gap-3 mt-2">
+                {editingPostId && (
+                  <button 
+                    type="button" 
+                    onClick={cancelEdit}
+                    className="text-gray-400 hover:text-white px-5 py-2.5 rounded-full font-semibold transition"
+                  >
+                    Cancelar
+                  </button>
+                )}
+                <button 
+                  type="submit" 
+                  disabled={createPostMutation.isPending || updatePostMutation.isPending}
+                  className="bg-blue-500 text-white px-8 py-2.5 rounded-full font-bold hover:bg-blue-600 transition disabled:opacity-50 shadow-lg shadow-blue-500/20"
+                >
+                  {editingPostId 
+                    ? (updatePostMutation.isPending ? 'Salvando...' : 'Salvar') 
+                    : (createPostMutation.isPending ? 'Postando...' : 'Postar')}
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -263,13 +351,25 @@ export function Timeline() {
         {error && <p className="text-center text-red-500 font-medium">Erro ao carregar os posts.</p>}
 
         <div className="space-y-5 pb-10">
-          {/* AQUI ESTÁ O BLOCO QUE TINHA SUMIDO! */}
           {posts?.map((post) => {
             const finalAuthorName = post.authorName || 'Usuário';
             const authorHandle = finalAuthorName.toLowerCase().replace(/\s+/g, '');
-
+            const isMyPost = String(post.authorId) === String(loggedUserId);
             return (
-              <div key={post.id} className="bg-[#1E293B] p-6 rounded-2xl shadow-lg border border-slate-700 hover:border-slate-600 transition">
+              <div key={post.id} className="bg-[#1E293B] p-6 rounded-2xl shadow-lg border border-slate-700 hover:border-slate-600 transition relative">
+                
+                {/* Botões de Ação (Aparecem só se for meu post) */}
+                {isMyPost && (
+                  <div className="absolute top-6 right-6 flex gap-3">
+                    <button onClick={() => handleEditClick(post)} className="text-gray-500 hover:text-blue-400 transition" title="Editar post">
+                      <Pencil className="h-5 w-5" />
+                    </button>
+                    <button onClick={() => handleDeleteClick(post.id)} className="text-gray-500 hover:text-red-500 transition" title="Deletar post">
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-baseline gap-2 mb-4">
                   <div className="font-bold text-white text-lg">{finalAuthorName}</div>
                   <div className="text-sm text-gray-500">
@@ -277,7 +377,7 @@ export function Timeline() {
                   </div>
                 </div>
 
-                <h2 className="text-2xl font-extrabold text-white mb-3">{post.title}</h2>
+                <h2 className="text-2xl font-extrabold text-white mb-3 pr-16">{post.title}</h2>
                 <p className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap">{post.content}</p>
                 
                 {post.image && (
@@ -290,18 +390,19 @@ export function Timeline() {
 
                 <div className="mt-5 flex items-center gap-6">
                   <button 
-                      onClick={() => handleLike(String(post.id))} 
-                      className="flex items-center gap-2.5 text-gray-500 text-sm font-semibold transition group"
-                  >
-                    {post.likesCount > 0 ? (
-                      <Heart className="h-6 w-6 text-red-500 fill-red-500 transition group-hover:scale-110" />
-                    ) : (
-                      <Heart className="h-6 w-6 text-gray-600 transition group-hover:text-red-500 group-hover:scale-110" />
-                    )}
-                    <span className={`${post.likesCount > 0 ? 'text-red-500' : 'group-hover:text-red-500'}`}>
-                      {post.likesCount || 0}
-                    </span>
-                  </button>
+                        onClick={() => handleLike(String(post.id))} 
+                        className="flex items-center gap-2.5 text-gray-500 text-sm font-semibold transition group"
+                        >
+                        {/* Se o post tiver mais de 0 likes, ele fica vermelho e preenchido */}
+                        {post.likesCount > 0 ? (
+                            <Heart className="h-6 w-6 text-red-500 fill-red-500 transition group-hover:scale-110" />
+                        ) : (
+                            <Heart className="h-6 w-6 text-gray-600 transition group-hover:text-red-500 group-hover:scale-110" />
+                        )}
+                        <span className={`${post.likesCount > 0 ? 'text-red-500' : 'group-hover:text-red-500'}`}>
+                            {post.likesCount || 0}
+                        </span>
+                    </button>
                 </div>
               </div>
             );

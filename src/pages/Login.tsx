@@ -31,7 +31,19 @@ export function Login() {
       
       const token = response.data.token || response.data.data?.token;
       if (token) {
+        // 1. Salva o token
         localStorage.setItem('token', token);
+        
+        // 2. Abre a "maleta" do token (decodifica o JWT) para pegar o ID
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        
+        // 3. Salva o ID no localStorage
+        const userId = payload.sub || payload.id;
+        if (userId) {
+          localStorage.setItem('userId', String(userId));
+        }
+
+        // 4. Vai pra Timeline
         navigate('/timeline');
       }
     } catch (error: any) {
@@ -121,7 +133,6 @@ export function Login() {
           <button 
             type="submit" 
             disabled={isSubmitting}
-            // Botão com sombra brilhante (glow)
             className="w-full bg-[#0EA5E9] text-white font-bold py-3 rounded-full hover:bg-blue-500 transition shadow-[0_0_15px_rgba(14,165,233,0.3)] disabled:opacity-50 mt-4"
           >
             {isSubmitting ? 'Carregando...' : 'Continuar'}
