@@ -23,5 +23,13 @@ Este projeto é um clone funcional de um "Mini Twitter", desenvolvido como parte
 1. Clone este repositório.
 2. Certifique-se de que o Backend fornecido esteja rodando na porta `3000`.
 3. Instale as dependências:
-   ```bash
+      ```bash
    npm install
+4. Inicie o projeto:
+   ```bash
+   npm run dev
+
+
+
+
+
