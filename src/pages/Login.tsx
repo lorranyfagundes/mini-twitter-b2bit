@@ -59,7 +59,7 @@ export function Login() {
     <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center p-4 font-sans text-white">
       
       {/* TÍTULO */}
-      <h1 className="text-4xl font-bold text-white mb-10">Mini Twitter</h1>
+      <h1 className="text-4xl font-normal text-white mb-10">Mini Twitter</h1>
 
       <div className="w-full max-w-sm">
         
