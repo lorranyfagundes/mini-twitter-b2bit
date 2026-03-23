@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-// Importamos os ícones da lucide-react
 import { Mail, Eye, EyeOff } from 'lucide-react';
+
 
 // Validação do Zod
 const loginSchema = z.object({
@@ -138,6 +138,16 @@ export function Login() {
             {isSubmitting ? 'Carregando...' : 'Continuar'}
           </button>
         </form>
+          
+          <div className="mt-6 text-center">
+  <p className="text-gray-400 mb-2">Apenas dando uma olhada?</p>
+  <Link 
+    to="/timeline" 
+    className="text-blue-500 font-semibold hover:text-blue-400 hover:underline transition"
+  >
+    Entrar como visitante
+  </Link>
+</div>
 
         {/* FOOTER */}
         <p className="text-center text-xs text-gray-500 mt-8 leading-relaxed">

@@ -54,7 +54,7 @@ export function Timeline() {
     resolver: zodResolver(postSchema),
   });
 
-  // Debounce da pesquisa
+  // Debounce da pesquisa: aguarda o usuário parar de digitar por 500ms antes de atualizar o termo de busca
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       setSearchTerm(searchInput);
@@ -63,7 +63,7 @@ export function Timeline() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchInput]);
 
-  // SCROLL INFINITO: Trocamos o useQuery pelo useInfiniteQuery
+  // Sccroll infinito: usa o useInfiniteQuery para gerenciar o estado das páginas na memória
   const { 
     data, 
     isLoading, 
@@ -95,7 +95,6 @@ export function Timeline() {
     }
   });
 
-  // Junta todas as páginas carregadas em uma lista única
   const posts = data?.pages.flatMap(page => page.posts) || [];
 
   // Observador para verificar se o usuário chegou no final da tela
@@ -116,7 +115,7 @@ export function Timeline() {
     return () => observer.disconnect();
   }, [hasNextPage, fetchNextPage, isFetchingNextPage]);
 
-  // Mutações...
+  // Mutações
   const createPostMutation = useMutation({
     mutationFn: async (payload: any) => await api.post('/posts', payload),
     onSuccess: () => {
@@ -179,14 +178,14 @@ export function Timeline() {
   }
 
   function handleLogout() {
-    localStorage.clear();
-    window.location.reload(); 
-  }
+      localStorage.clear();
+      window.location.reload(); 
+    }
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-white font-sans flex flex-col">
       
-      {/* HEADER FULL WIDTH */}
+      {/* Header full width */}
       <header className="sticky top-0 z-50 bg-[#0F172A] border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="w-1/4">
           <h1 className="text-xl font-normal text-white">Mini Twitter</h1>
@@ -205,16 +204,37 @@ export function Timeline() {
           </div>
         </div>
 
-        <div className="w-1/4 flex justify-end">
-          <button onClick={handleLogout} className="text-gray-400 hover:text-white bg-[#1E293B] hover:bg-slate-700 p-2.5 rounded-full border border-slate-700/50 transition">
-            <LogOut className="h-5 w-5" />
-          </button>
+<div className="w-1/4 flex justify-end">
+          {isLogged ? (
+            <button 
+              onClick={handleLogout} 
+              title="Sair"
+              className="text-gray-400 hover:text-white bg-[#1E293B] hover:bg-slate-700 p-2.5 rounded-full border border-slate-700/50 transition"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/register')}
+                className="text-sm font-semibold text-white bg-transparent border border-slate-600 px-5 py-2 rounded-full hover:bg-slate-800 transition"
+              >
+                Registrar-se
+              </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="text-sm font-bold text-white bg-blue-500 hover:bg-blue-600 px-5 py-2 rounded-full transition"
+              >
+                Login
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       <main className="flex-1 w-full max-w-3xl mx-auto p-4 space-y-6 mt-6">
         
-        {/* CARD DE POSTAGEM */}
+        {/* Card de Post */}
         <div className={`bg-[#1E293B] border rounded-2xl p-6 shadow-xl transition-all ${editingPostId ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-800'}`}>
           <form onSubmit={handleSubmit(onSubmit)}>
             <input 
@@ -263,7 +283,7 @@ export function Timeline() {
           </form>
         </div>
 
-        {/* LISTA DE POSTS */}
+        {/* Lista de Posts */}
         <div className="space-y-5 pb-6">
           {isLoading ? <p className="text-center animate-pulse text-gray-500">Carregando...</p> : 
             posts.map((post) => {
@@ -293,15 +313,14 @@ export function Timeline() {
           }
         </div>
 
-        {/* GATILHO DO SCROLL INFINITO (Invisível, mas ativa a próxima página) */}
+        {/* Gatilho do Scroll Infinito - carregar a próxima página automaticamente ao chegar no fim do feed */}
         <div ref={observerTarget} className="h-10 w-full flex justify-center pb-10">
           {isFetchingNextPage && <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />}
-          {!hasNextPage && posts.length > 0 && <p className="text-slate-500 text-sm">Você chegou ao fim dos posts!</p>}
         </div>
 
       </main>
 
-      {/* FOOTER */}
+      {/* Footer */}
       <footer className="bg-[#1E293B] border-t border-slate-800 px-6 py-5 mt-auto shadow-inner">
         <h1 className="text-lg font-normal text-white">Mini Twitter</h1>
       </footer>

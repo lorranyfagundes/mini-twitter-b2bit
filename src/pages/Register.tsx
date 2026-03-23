@@ -132,7 +132,15 @@ export function Register() {
             {isSubmitting ? 'Criando conta...' : 'Continuar'}
           </button>
         </form>
-
+          <div className="mt-6 text-center">
+            <p className="text-gray-400 mb-2">Apenas dando uma olhada?</p>
+            <Link 
+              to="/timeline" 
+              className="text-blue-500 font-semibold hover:text-blue-400 hover:underline transition"
+            >
+              Entrar como visitante
+            </Link>
+          </div>
         <p className="text-center text-xs text-gray-500 mt-8 leading-relaxed">
           Ao clicar em continuar, você concorda com nossos <br />
           <a href="#" className="underline hover:text-gray-300">Termos de Serviço</a> e <a href="#" className="underline hover:text-gray-300">Política de Privacidade</a>.
